@@ -1,0 +1,18 @@
+# Addon list
+.addon-list.txt
+
+# Generated AutoConfig file
+autoconfig/autoconfig.js
+
+# Backups
+*.backup
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
