@@ -97,32 +97,43 @@ generate_autoconfig() {
 
     log_info "Generating autoconfig.js from template..."
 
-    local addon_paths=""
+    local output_file="${AUTOCONFIG_DIR}/autoconfig.js"
     local count=0
+    local in_placeholder=0
 
-    while IFS= read -r addon_path; do
-        [[ -z "$addon_path" ]] && continue
-        [[ "$addon_path" =~ ^# ]] && continue
+    # Read template line by line and insert addon paths at placeholder
+    > "$output_file"  # Truncate output file
 
-        # Verify addon exists
-        if [[ ! -e "$addon_path" ]]; then
-            log_warn "Addon path does not exist (skipping): $addon_path"
-            continue
+    while IFS= read -r line; do
+        if [[ "$line" =~ "// ADDON_PATHS_PLACEHOLDER" ]]; then
+            # Insert addon paths
+            while IFS= read -r addon_path; do
+                [[ -z "$addon_path" ]] && continue
+                [[ "$addon_path" =~ ^# ]] && continue
+
+                # Verify addon exists
+                if [[ ! -e "$addon_path" ]]; then
+                    log_warn "Addon path does not exist (skipping): $addon_path"
+                    continue
+                fi
+
+                # Escape path for JavaScript string
+                local escaped_path
+                escaped_path=$(echo "$addon_path" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+
+                echo "        \"${escaped_path}\"," >> "$output_file"
+                count=$((count + 1))
+            done < "$ADDON_LIST"
+
+            # Remove trailing comma from last line
+            if [[ $count -gt 0 ]]; then
+                # Use temp file to remove trailing comma from last addon path
+                sed -i '' '$ s/,$//' "$output_file"
+            fi
+        else
+            echo "$line" >> "$output_file"
         fi
-
-        # Escape path for JavaScript string
-        local escaped_path
-        escaped_path=$(echo "$addon_path" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
-
-        addon_paths="${addon_paths}        \"${escaped_path}\",\n"
-        count=$((count + 1))
-    done < "$ADDON_LIST"
-
-    # Remove trailing comma and newline
-    addon_paths=$(echo -e "$addon_paths" | sed '$ s/,$//')
-
-    # Generate autoconfig.js from template
-    sed "s|// ADDON_PATHS_PLACEHOLDER|${addon_paths}|" "$TEMPLATE_FILE" > "${AUTOCONFIG_DIR}/autoconfig.js"
+    done < "$TEMPLATE_FILE"
 
     log_info "Generated autoconfig.js with $count addon(s)"
 }
