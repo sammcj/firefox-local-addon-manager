@@ -215,11 +215,17 @@ add_addon() {
     log_warn "Restart Firefox to load the addon"
 }
 
-# Remove addon from list
+# Remove addon from list (interactive if no path provided)
 remove_addon() {
     local addon_path="$1"
 
     init_addon_list
+
+    # If no path provided, show interactive menu
+    if [[ -z "$addon_path" ]]; then
+        remove_addon_interactive
+        return $?
+    fi
 
     # Convert to absolute path if it's a path
     if [[ -e "$addon_path" ]] && [[ ! "$addon_path" =~ ^/ ]]; then
@@ -243,6 +249,118 @@ remove_addon() {
         log_warn "Addon not found in list: $addon_path"
         return 1
     fi
+}
+
+# Interactive addon removal menu
+remove_addon_interactive() {
+    init_addon_list
+
+    # Read addons into array
+    local -a addons=()
+    while IFS= read -r addon_path; do
+        [[ -z "$addon_path" ]] && continue
+        [[ "$addon_path" =~ ^# ]] && continue
+        addons+=("$addon_path")
+    done < "$ADDON_LIST"
+
+    if [[ ${#addons[@]} -eq 0 ]]; then
+        log_warn "No addons configured to remove"
+        return 1
+    fi
+
+    # Display menu
+    echo ""
+    log_info "Select addon(s) to remove:"
+    echo ""
+
+    local i=1
+    for addon in "${addons[@]}"; do
+        if [[ -e "$addon" ]]; then
+            echo "  $i) ✓ $addon"
+        else
+            echo "  $i) ✗ $addon (missing)"
+        fi
+        i=$((i + 1))
+    done
+
+    echo ""
+    echo "  0) Cancel"
+    echo ""
+    echo -n "Enter number(s) separated by spaces (e.g., 1 3 5): "
+
+    local input
+    read -r input
+
+    # Handle cancel
+    if [[ -z "$input" ]] || [[ "$input" == "0" ]]; then
+        log_info "Cancelled"
+        return 0
+    fi
+
+    # Parse selections
+    local -a to_remove=()
+    local changed=0
+
+    for num in $input; do
+        # Validate number
+        if ! [[ "$num" =~ ^[0-9]+$ ]]; then
+            log_warn "Invalid selection: $num"
+            continue
+        fi
+
+        local idx=$((num - 1))
+
+        if [[ $idx -ge 0 ]] && [[ $idx -lt ${#addons[@]} ]]; then
+            to_remove+=("${addons[$idx]}")
+        else
+            log_warn "Invalid selection: $num (out of range)"
+        fi
+    done
+
+    if [[ ${#to_remove[@]} -eq 0 ]]; then
+        log_warn "No valid selections made"
+        return 1
+    fi
+
+    # Confirm removal
+    echo ""
+    log_info "Will remove ${#to_remove[@]} addon(s):"
+    for addon in "${to_remove[@]}"; do
+        echo "  - $addon"
+    done
+    echo ""
+    echo -n "Confirm removal? [y/N]: "
+
+    local confirm
+    read -r confirm
+
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        log_info "Cancelled"
+        return 0
+    fi
+
+    # Remove selected addons
+    echo ""
+    for addon in "${to_remove[@]}"; do
+        if grep -Fxq "$addon" "$ADDON_LIST" 2>/dev/null; then
+            grep -Fxv "$addon" "$ADDON_LIST" > "${ADDON_LIST}.tmp" || true
+            mv "${ADDON_LIST}.tmp" "$ADDON_LIST"
+            log_info "Removed: $addon"
+            changed=1
+        fi
+    done
+
+    if [[ $changed -eq 1 ]]; then
+        # Regenerate and reinstall
+        generate_autoconfig
+        install_autoconfig
+
+        echo ""
+        log_info "Successfully removed ${#to_remove[@]} addon(s)"
+        log_warn "Restart Firefox to apply changes"
+    fi
+
+    return 0
 }
 
 # List addons
@@ -378,7 +496,7 @@ Usage: $0 <command> [arguments]
 Commands:
   setup              Set up AutoConfig in Firefox
   add <path>         Add addon to auto-load list
-  remove <path>      Remove addon from list
+  remove [path]      Remove addon from list (interactive menu if no path)
   list               List configured addons
   status             Show installation status
   start              Launch Firefox (auto-reinstalls config if needed)
@@ -398,7 +516,10 @@ Examples:
   # Start Firefox (auto-loads addons)
   $0 start
 
-  # Remove addon
+  # Remove addon (interactive menu)
+  $0 remove
+
+  # Remove addon by path
   $0 remove ~/dev/my-addon
 
   # Check status
@@ -435,11 +556,7 @@ main() {
             add_addon "$2"
             ;;
         remove)
-            if [[ $# -lt 2 ]]; then
-                log_error "Usage: $0 remove <path>"
-                exit 1
-            fi
-            remove_addon "$2"
+            remove_addon "${2:-}"
             ;;
         list)
             list_addons

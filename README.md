@@ -37,7 +37,7 @@ Uses **Firefox AutoConfig** to automatically load addons as temporary extensions
 
 - `setup` - Install AutoConfig into Firefox
 - `add <path>` - Add addon to auto-load list
-- `remove <path>` - Remove addon from list
+- `remove [path]` - Remove addon from list (interactive menu if no path provided)
 - `list` - Show configured addons and installation status
 - `status` - Show detailed status information
 - `start` - Launch Firefox (auto-checks/fixes config)
@@ -62,8 +62,16 @@ Uses **Firefox AutoConfig** to automatically load addons as temporary extensions
 # Check installation status
 ./firefox-addon-loader.sh status
 
-# Remove addon
+# Remove addon by path
 ./firefox-addon-loader.sh remove ~/dev/my-addon
+
+# Remove addon interactively (shows menu)
+./firefox-addon-loader.sh remove
+# Select addon(s) to remove:
+#   1) ✓ /Users/you/dev/addon-one
+#   2) ✓ /Users/you/dev/addon-two
+#   0) Cancel
+# Enter number(s) separated by spaces (e.g., 1 3 5): 1
 ```
 
 ## Firefox Updates
@@ -129,6 +137,7 @@ When Firefox starts, AutoConfig runs and calls `AddonManager.installTemporaryAdd
 - After Firefox updates, use `./firefox-addon-loader.sh start` to auto-fix
 - Addon paths are stored in `.addon-list.txt` (one path per line)
 - AutoConfig files are auto-generated from `autoconfig/autoconfig.js.template`
+- Use `remove` without arguments for interactive menu with multi-select support
 
 ## Troubleshooting
 
